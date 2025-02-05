@@ -1,0 +1,34 @@
+/* styles.css */
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f4f4f4;
+    margin: 0;
+}
+
+#game-container {
+    text-align: center;
+}
+
+#word {
+    font-size: 2rem;
+    margin: 20px 0;
+}
+
+#wrong-letters {
+    margin: 20px 0;
+}
+
+#hangman {
+    border: 1px solid black;
+    margin: 20px auto;
+}
+
+#message {
+    margin: 20px 0;
+    font-size: 1.5rem;
+    color: red;
+}
