@@ -1,22 +1,865 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hangman Game</title>
-    <link rel="stylesheet" href="styles.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quarterman's Hangman</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Caveat+Brush&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --wall:      #1e1510;
+  --frame-lt:  #a0622a;
+  --frame:     #7a4520;
+  --frame-dk:  #4a2810;
+  --board:     #243b2f;
+  --board-lt:  #2e4d3c;
+  --chalk:     #ece8dc;
+  --chalk-dim: rgba(236,232,220,0.42);
+  --chalk-y:   #f5e96e;
+  --chalk-r:   #f07878;
+  --chalk-g:   #82e09a;
+  --chalk-b:   #7ec8e3;
+}
+
+html, body {
+  min-height: 100%;
+  background: var(--wall);
+  background-image:
+    repeating-linear-gradient(0deg,   transparent, transparent 59px, rgba(0,0,0,0.09) 60px),
+    repeating-linear-gradient(90deg,  transparent, transparent 59px, rgba(0,0,0,0.06) 60px);
+  font-family: 'Caveat', cursive;
+  color: var(--chalk);
+  overflow-x: hidden;
+}
+
+/* dust particle */
+.dust-particle {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: floatDust linear forwards;
+  z-index: 9998;
+}
+@keyframes floatDust {
+  0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0.8; }
+  100% { transform: translateY(-70px) translateX(var(--dx,0px)) scale(0.1); opacity: 0; }
+}
+
+/* board wrapper */
+.board-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1rem 4rem;
+  min-height: 100vh;
+}
+
+/* chalkboard */
+.chalkboard {
+  position: relative;
+  width: 100%; max-width: 920px;
+  background: var(--board);
+  background-image: radial-gradient(ellipse at 50% 44%, #2e4d3c 0%, #1f352a 68%, #182b22 100%);
+  border-radius: 3px;
+  padding: 2.8rem 3rem 3.2rem;
+  border: 22px solid var(--frame);
+  box-shadow:
+    inset 0 0 70px rgba(0,0,0,0.5),
+    inset 0 0 14px rgba(0,0,0,0.25),
+    0 0 0 3px var(--frame-dk),
+    0 0 0 5px var(--frame-lt),
+    0 0 0 8px var(--frame-dk),
+    0 24px 70px rgba(0,0,0,0.9);
+}
+
+/* board grain texture */
+.chalkboard::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  pointer-events: none; mix-blend-mode: screen;
+  border-radius: 2px;
+}
+
+/* chalk tray */
+.chalk-tray {
+  position: absolute;
+  bottom: -40px; left: -22px; right: -22px;
+  height: 18px;
+  background: linear-gradient(to bottom, #5c3518 0%, #3a2010 100%);
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 5px 12px rgba(0,0,0,0.65);
+}
+.chalk-tray::after {
+  content: '';
+  position: absolute;
+  top: 4px; left: 5%; right: 5%;
+  height: 5px;
+  background: linear-gradient(to right,
+    transparent,
+    rgba(236,232,220,0.22) 15%,
+    rgba(236,232,220,0.1)  38%,
+    rgba(236,232,220,0.28) 55%,
+    rgba(236,232,220,0.08) 72%,
+    transparent);
+  border-radius: 2px;
+}
+
+/* screens */
+.screen { display: none; animation: chalkIn 0.38s ease; }
+.screen.active { display: block; }
+@keyframes chalkIn {
+  from { opacity: 0; transform: scale(0.985); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* chalk divider */
+.chalk-rule {
+  width: 100%; height: 2px; margin: 1.2rem 0;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--chalk-dim) 0px, var(--chalk-dim) 9px,
+    transparent 9px, transparent 14px
+  );
+}
+
+/* title */
+.game-title {
+  font-family: 'Caveat Brush', cursive;
+  font-size: clamp(2.4rem, 7.5vw, 4.2rem);
+  color: var(--chalk);
+  text-align: center;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.35), 0 0 22px rgba(236,232,220,0.12), 2px 2px 8px rgba(0,0,0,0.55);
+}
+.game-sub {
+  text-align: center;
+  font-size: 1.05rem;
+  color: var(--chalk-dim);
+  letter-spacing: 0.14em;
+  margin-top: 0.2rem;
+}
+
+/* scores */
+.score-row {
+  display: flex; justify-content: center; gap: 3.5rem;
+  margin: 1.2rem 0 0.6rem;
+}
+.score-item { text-align: center; }
+.score-val {
+  font-family: 'Caveat Brush', cursive;
+  font-size: 2.6rem; line-height: 1;
+  color: var(--chalk-y);
+  text-shadow: 0 0 14px rgba(245,233,110,0.35);
+}
+.score-lbl { font-size: 0.88rem; color: var(--chalk-dim); letter-spacing: 0.1em; }
+
+/* mode grid */
+.mode-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1.2rem; margin-top: 1rem;
+}
+.mode-card {
+  border: 2px dashed rgba(236,232,220,0.28);
+  border-radius: 4px; padding: 1.6rem 1rem;
+  text-align: center; cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.14s;
+  background: transparent;
+}
+.mode-card:hover {
+  border-color: rgba(236,232,220,0.75);
+  background: rgba(236,232,220,0.05);
+  transform: translateY(-2px);
+}
+.mode-icon { font-size: 2.6rem; display: block; margin-bottom: 0.5rem; }
+.mode-label { font-family: 'Caveat Brush', cursive; font-size: 1.5rem; color: var(--chalk); }
+.mode-desc  { font-size: 0.95rem; color: var(--chalk-dim); margin-top: 0.25rem; }
+
+/* headings */
+.chalk-heading {
+  font-family: 'Caveat Brush', cursive;
+  font-size: 2rem; color: var(--chalk-y);
+  text-align: center; margin-bottom: 0.8rem;
+  text-shadow: 0 0 14px rgba(245,233,110,0.22);
+}
+
+/* category grid */
+.cat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem; margin: 0.6rem 0 1rem;
+}
+@media (max-width: 560px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.cat-btn {
+  padding: 0.5rem 0.4rem;
+  background: transparent;
+  border: 1px solid rgba(236,232,220,0.22);
+  border-radius: 3px;
+  color: var(--chalk);
+  font-family: 'Caveat', cursive; font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 0.13s, background 0.13s, color 0.13s;
+}
+.cat-btn:hover, .cat-btn.selected {
+  border-color: var(--chalk-y);
+  background: rgba(245,233,110,0.08);
+  color: var(--chalk-y);
+}
+
+/* inputs */
+.chalk-label {
+  display: block; font-size: 1rem; color: var(--chalk-dim);
+  letter-spacing: 0.08em; margin-bottom: 0.3rem;
+}
+.chalk-input {
+  width: 100%; background: transparent;
+  border: none; border-bottom: 2px solid rgba(236,232,220,0.38);
+  color: var(--chalk);
+  font-family: 'Caveat', cursive; font-size: 1.3rem;
+  padding: 0.4rem 0.2rem; outline: none;
+  letter-spacing: 0.08em;
+  transition: border-color 0.18s;
+}
+.chalk-input:focus { border-color: var(--chalk); }
+.chalk-input::placeholder { color: rgba(236,232,220,0.22); }
+
+.masked-display {
+  font-family: 'Caveat Brush', cursive;
+  font-size: 1.9rem; color: var(--chalk-b);
+  text-align: center; letter-spacing: 0.28em;
+  margin: 0.6rem 0; min-height: 2.5rem;
+}
+
+/* chalk buttons */
+.chalk-btn {
+  display: block; width: 100%;
+  background: transparent;
+  border: 2px solid rgba(236,232,220,0.42);
+  border-radius: 3px;
+  color: var(--chalk);
+  font-family: 'Caveat Brush', cursive; font-size: 1.3rem;
+  letter-spacing: 0.06em;
+  padding: 0.6rem 1rem; cursor: pointer;
+  margin-top: 0.8rem;
+  transition: border-color 0.14s, background 0.14s, color 0.14s, transform 0.1s;
+}
+.chalk-btn:hover {
+  border-color: var(--chalk);
+  background: rgba(236,232,220,0.07);
+  transform: translateY(-1px);
+}
+.chalk-btn:active { transform: scale(0.97); }
+.chalk-btn.primary { border-color: var(--chalk-y); color: var(--chalk-y); }
+.chalk-btn.primary:hover { background: rgba(245,233,110,0.09); }
+
+/* ── GAME SCREEN ── */
+.game-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 1.4rem; flex-wrap: wrap; gap: 0.5rem;
+}
+.game-header-title {
+  font-family: 'Caveat Brush', cursive; font-size: 1.6rem; color: var(--chalk);
+}
+.header-btns { display: flex; gap: 0.6rem; }
+.hdr-btn {
+  background: transparent;
+  border: 1px solid rgba(236,232,220,0.28);
+  border-radius: 3px;
+  color: var(--chalk-dim);
+  font-family: 'Caveat', cursive; font-size: 1rem;
+  padding: 0.25rem 0.75rem; cursor: pointer;
+  transition: border-color 0.14s, color 0.14s;
+}
+.hdr-btn:hover { border-color: var(--chalk); color: var(--chalk); }
+
+.game-layout {
+  display: grid; grid-template-columns: 210px 1fr;
+  gap: 2.5rem; align-items: start;
+}
+@media (max-width: 640px) { .game-layout { grid-template-columns: 1fr; } }
+
+#hangman-canvas {
+  display: block;
+  border: 1px solid rgba(236,232,220,0.1);
+  border-radius: 2px;
+}
+
+.mode-badge {
+  display: block; font-size: 0.92rem; color: var(--chalk-dim);
+  letter-spacing: 0.1em; margin-bottom: 0.5rem;
+}
+.hint-line {
+  font-size: 1rem; color: var(--chalk-b);
+  font-style: italic; margin-bottom: 0.7rem;
+}
+
+/* word display */
+.word-display {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem;
+  justify-content: center;
+  margin: 0.8rem 0 1rem; min-height: 3.2rem;
+}
+.letter-slot {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 0.2rem;
+}
+.letter-slot .char {
+  font-family: 'Caveat Brush', cursive; font-size: 1.9rem;
+  color: var(--chalk); min-width: 1.5rem; text-align: center;
+  text-shadow: 0 0 10px rgba(236,232,220,0.38);
+  animation: chalkReveal 0.28s ease;
+}
+.letter-slot .underline {
+  width: 1.5rem; height: 2px;
+  background: rgba(236,232,220,0.5);
+  border-radius: 1px;
+}
+.letter-slot.space { width: 1rem; }
+@keyframes chalkReveal {
+  from { opacity: 0; transform: scale(0.3) rotate(-8deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* wrong letters */
+.wrong-section { margin-top: 1rem; }
+.wrong-heading {
+  font-size: 0.9rem; color: var(--chalk-dim);
+  letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 0.45rem;
+}
+.wrong-letters { display: flex; flex-wrap: wrap; gap: 0.5rem; min-height: 1.8rem; }
+.wrong-letter {
+  font-family: 'Caveat Brush', cursive; font-size: 1.15rem;
+  color: var(--chalk-r); position: relative; padding: 0 0.15rem;
+  text-shadow: 0 0 8px rgba(240,120,120,0.32);
+  animation: chalkIn 0.2s ease;
+}
+.wrong-letter::after {
+  content: ''; position: absolute;
+  top: 52%; left: -2px; right: -2px; height: 2px;
+  background: var(--chalk-r);
+  transform: rotate(-7deg); opacity: 0.8;
+}
+
+.attempts-row {
+  font-size: 1rem; color: var(--chalk-dim); margin-top: 0.5rem;
+}
+.attempts-row span {
+  font-family: 'Caveat Brush', cursive; font-size: 1.15rem;
+  color: var(--chalk-y);
+}
+
+/* keyboard */
+.keyboard {
+  display: grid; grid-template-columns: repeat(9, 1fr);
+  gap: 0.38rem; margin-top: 1.3rem;
+}
+@media (max-width: 480px) { .keyboard { grid-template-columns: repeat(7, 1fr); } }
+
+.key {
+  aspect-ratio: 1;
+  background: transparent;
+  border: 1px solid rgba(236,232,220,0.25);
+  border-radius: 3px;
+  color: var(--chalk);
+  font-family: 'Caveat Brush', cursive; font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s, transform 0.08s;
+  display: flex; align-items: center; justify-content: center;
+}
+.key:hover:not(:disabled):not(.used-correct):not(.used-wrong) {
+  border-color: var(--chalk); background: rgba(236,232,220,0.1);
+  transform: translateY(-1px);
+}
+.key:active:not(:disabled) { transform: scale(0.93); }
+.key.used-correct {
+  color: var(--chalk-g); border-color: rgba(130,224,154,0.4);
+  background: rgba(130,224,154,0.07); cursor: default;
+}
+.key.used-wrong {
+  color: rgba(240,120,120,0.38);
+  border-color: rgba(240,120,120,0.18);
+  cursor: default; text-decoration: line-through; opacity: 0.5;
+}
+.key:disabled { cursor: default; }
+
+/* overlay */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(12,8,4,0.84);
+  z-index: 500;
+  align-items: center; justify-content: center;
+  padding: 2rem;
+  backdrop-filter: blur(3px);
+}
+.overlay.active { display: flex; animation: fadeOv 0.38s ease; }
+@keyframes fadeOv { from { opacity: 0; } to { opacity: 1; } }
+
+.overlay-board {
+  position: relative;
+  background: var(--board);
+  background-image: radial-gradient(ellipse at 50% 40%, #2e4d3c 0%, #1f352a 80%);
+  border: 16px solid var(--frame);
+  box-shadow:
+    inset 0 0 35px rgba(0,0,0,0.45),
+    0 0 0 3px var(--frame-dk),
+    0 0 0 5px var(--frame-lt),
+    0 0 0 7px var(--frame-dk),
+    0 24px 70px rgba(0,0,0,0.9);
+  border-radius: 3px;
+  padding: 2.6rem 3rem;
+  text-align: center;
+  max-width: 440px; width: 100%;
+}
+.overlay-board::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+  pointer-events: none; mix-blend-mode: screen;
+}
+
+.overlay-icon { font-size: 3rem; margin-bottom: 0.3rem; }
+.overlay-title {
+  font-family: 'Caveat Brush', cursive; font-size: 3.2rem; line-height: 1;
+  margin-bottom: 0.5rem;
+}
+.overlay-title.win  { color: var(--chalk-y); text-shadow: 0 0 22px rgba(245,233,110,0.55); }
+.overlay-title.lose { color: var(--chalk-r); text-shadow: 0 0 22px rgba(240,120,120,0.45); }
+
+.ov-rule { width: 100%; height: 1px; background: rgba(236,232,220,0.18); margin: 1rem 0; }
+
+.overlay-word {
+  font-size: 1.1rem; color: var(--chalk-dim); margin-bottom: 0.3rem; letter-spacing: 0.06em;
+}
+.overlay-word strong {
+  font-family: 'Caveat Brush', cursive; font-size: 1.45rem;
+  color: var(--chalk); letter-spacing: 0.12em;
+}
+.overlay-desc { font-size: 1rem; color: var(--chalk-dim); margin-bottom: 1.4rem; }
+
+/* shake */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%,60%  { transform: translateX(-6px); }
+  40%,80%  { transform: translateX(6px); }
+}
+.shake { animation: shake 0.35s ease; }
+
+/* footer */
+.chalk-footer {
+  margin-top: 3rem;
+  font-family: 'Caveat', cursive; font-size: 0.85rem;
+  color: rgba(236,232,220,0.18); text-align: center; letter-spacing: 0.15em;
+}
+</style>
 </head>
 <body>
-    <h1>Quarterman's Hangman Game</h1>
-    <div id="game-container">
-        <input type="text" id="word-input" placeholder="Enter a word">
-        <button id="start-game">Start Game</button>
-        <div id="word"></div>
-        <div id="wrong-letters"></div>
-        <canvas id="hangman" width="200" height="200"></canvas>
-        <div id="message"></div>
-        <input type="text" id="letter-input" maxlength="1" disabled>
+
+<div class="board-wrap">
+<div class="chalkboard">
+  <div class="chalk-tray"></div>
+
+  <!-- ══ TITLE SCREEN ══ -->
+  <div id="screen-title" class="screen active">
+    <div class="game-title">Quarterman's Hangman</div>
+    <div class="game-sub">a classroom classic · est. whenever</div>
+    <div class="chalk-rule"></div>
+    <div class="score-row">
+      <div class="score-item">
+        <div class="score-val" id="home-wins">0</div>
+        <div class="score-lbl">Wins</div>
+      </div>
+      <div class="score-item">
+        <div class="score-val" id="home-losses">0</div>
+        <div class="score-lbl">Losses</div>
+      </div>
+      <div class="score-item">
+        <div class="score-val" id="home-streak">0</div>
+        <div class="score-lbl">Streak</div>
+      </div>
     </div>
-    <script src="script.js"></script>
+    <div class="chalk-rule"></div>
+    <div class="mode-grid">
+      <div class="mode-card" onclick="selectMode(1)">
+        <span class="mode-icon">🎲</span>
+        <div class="mode-label">Solo Play</div>
+        <div class="mode-desc">Computer picks the word</div>
+      </div>
+      <div class="mode-card" onclick="selectMode(2)">
+        <span class="mode-icon">✏️</span>
+        <div class="mode-label">Pass &amp; Play</div>
+        <div class="mode-desc">Player 1 writes, Player 2 guesses</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CATEGORY SCREEN ══ -->
+  <div id="screen-category" class="screen">
+    <div class="chalk-heading">Choose a Category</div>
+    <div class="cat-grid" id="cat-grid"></div>
+    <label class="chalk-label">Hint for the guesser (optional)</label>
+    <input class="chalk-input" id="hint-input" placeholder="e.g. lives in the ocean…" maxlength="60">
+    <div class="chalk-rule" style="margin-top:1.2rem;"></div>
+    <button class="chalk-btn primary" onclick="startSoloGame()">Draw the Gallows →</button>
+    <button class="chalk-btn" onclick="showScreen('screen-title')">← Back</button>
+  </div>
+
+  <!-- ══ WORD ENTRY SCREEN ══ -->
+  <div id="screen-entry" class="screen">
+    <div class="chalk-heading">Pass &amp; Play</div>
+    <p style="text-align:center;color:var(--chalk-dim);font-size:1.05rem;margin-bottom:1.2rem;">
+      Player 2 — look away! Player 1, write your secret word below.
+    </p>
+    <label class="chalk-label">Secret Word or Phrase</label>
+    <input class="chalk-input" id="word-entry" type="password" placeholder="shh…" maxlength="30" oninput="updateMaskedPreview()">
+    <div class="masked-display" id="masked-preview">—</div>
+    <label class="chalk-label" style="margin-top:1rem;">Hint for Player 2 (optional)</label>
+    <input class="chalk-input" id="p2-hint-input" placeholder="give them a fighting chance…" maxlength="60">
+    <div class="chalk-rule" style="margin-top:1.2rem;"></div>
+    <button class="chalk-btn primary" onclick="startDuelGame()">Pass to Player 2 →</button>
+    <button class="chalk-btn" onclick="showScreen('screen-title')">← Back</button>
+  </div>
+
+  <!-- ══ GAME SCREEN ══ -->
+  <div id="screen-game" class="screen">
+    <div class="game-header">
+      <div class="game-header-title">Quarterman's Hangman</div>
+      <div class="header-btns">
+        <button class="hdr-btn" onclick="showScreen('screen-title')">✕ Quit</button>
+        <button class="hdr-btn" onclick="replayGame()">↺ New Word</button>
+      </div>
+    </div>
+    <div class="game-layout">
+      <div>
+        <canvas id="hangman-canvas" width="200" height="250"></canvas>
+      </div>
+      <div>
+        <span class="mode-badge" id="mode-badge">Solo · Random</span>
+        <div class="hint-line" id="hint-display" style="display:none;"></div>
+        <div class="word-display" id="word-display"></div>
+        <div class="wrong-section">
+          <div class="wrong-heading">Wrong Guesses</div>
+          <div class="wrong-letters" id="wrong-letters"></div>
+        </div>
+        <div class="attempts-row">Chances left: <span id="attempts-left">6</span> / 6</div>
+        <div class="keyboard" id="keyboard"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /chalkboard -->
+<div class="chalk-footer">Quarterman's Hangman · by Gary Langley</div>
+</div><!-- /board-wrap -->
+
+<!-- ══ WIN / LOSE OVERLAY ══ -->
+<div id="overlay" class="overlay">
+  <div class="overlay-board">
+    <div class="overlay-icon" id="overlay-icon"></div>
+    <div class="overlay-title" id="overlay-title"></div>
+    <div class="ov-rule"></div>
+    <div class="overlay-word" id="overlay-word"></div>
+    <div class="overlay-desc" id="overlay-desc"></div>
+    <button class="chalk-btn primary" onclick="overlayReplay()">↺ Play Again</button>
+    <button class="chalk-btn" onclick="closeOverlay(); showScreen('screen-title');">⬛ Main Menu</button>
+  </div>
+</div>
+
+<script>
+// ─── WORD BANK ───────────────────────────────────────
+const WORD_BANK = {
+  Animals:    ['elephant','jaguar','octopus','flamingo','wolverine','chameleon','pangolin','platypus','narwhal','axolotl','capybara','chimpanzee','mongoose','pelican','salamander','meerkat','armadillo'],
+  Movies:     ['inception','gladiator','interstellar','parasite','braveheart','spotlight','whiplash','chinatown','casablanca','goodfellas','moonlight','vertigo','fargo','oldboy','amadeus','magnolia'],
+  Countries:  ['mozambique','azerbaijan','zimbabwe','luxembourg','kyrgyzstan','madagascar','uzbekistan','nicaragua','venezuela','cambodia','mauritius','tajikistan','switzerland','philippines'],
+  Foods:      ['guacamole','prosciutto','croissant','couscous','bruschetta','gazpacho','jambalaya','moussaka','tiramisu','quesadilla','enchilada','ratatouille','baklava','goulash','poutine'],
+  Science:    ['photosynthesis','chromosome','neutron','hypothesis','osmosis','mitosis','catalyst','ecosystem','electron','molecule','atmosphere','radiation','quantum','entropy','relativity'],
+  History:    ['renaissance','napoleon','cleopatra','crusades','guillotine','conquistador','revolution','pharaoh','samurai','gladiator','pompeii','versailles','inquisition','colonialism'],
+  Technology: ['algorithm','bandwidth','blockchain','cybersecurity','encryption','javascript','kubernetes','metadata','robotics','semiconductor','transistor','virtualization','wavelength'],
+  Random:     ['adventure','balcony','carnival','labyrinth','mystique','umbrella','whirlpool','zeppelin','volcano','phantom','sorcerer','kingdom','treasure','eclipse','fortress','cascade'],
+};
+const CATEGORIES = Object.keys(WORD_BANK);
+
+// ─── STATE ───────────────────────────────────────────
+let state = {
+  mode: 1, word: '', hint: '', category: '',
+  correct: new Set(), wrong: [], maxWrong: 6, gameOver: false,
+  scores: { wins: 0, losses: 0, streak: 0 },
+};
+
+// ─── SCORES ──────────────────────────────────────────
+function loadScores() {
+  try {
+    const s = JSON.parse(localStorage.getItem('qhm_scores') || '{}');
+    state.scores = { wins: s.wins||0, losses: s.losses||0, streak: s.streak||0 };
+  } catch(e) {}
+  refreshScores();
+}
+function saveScores() {
+  localStorage.setItem('qhm_scores', JSON.stringify(state.scores));
+  refreshScores();
+}
+function refreshScores() {
+  document.getElementById('home-wins').textContent   = state.scores.wins;
+  document.getElementById('home-losses').textContent = state.scores.losses;
+  document.getElementById('home-streak').textContent = state.scores.streak;
+}
+
+// ─── SCREENS ─────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ─── MODE SELECT ─────────────────────────────────────
+function selectMode(m) {
+  state.mode = m;
+  if (m === 1) { buildCategoryGrid(); showScreen('screen-category'); }
+  else {
+    document.getElementById('word-entry').value = '';
+    document.getElementById('p2-hint-input').value = '';
+    document.getElementById('masked-preview').textContent = '—';
+    showScreen('screen-entry');
+  }
+}
+
+// ─── CATEGORY GRID ───────────────────────────────────
+let selectedCategory = 'Random';
+function buildCategoryGrid() {
+  const grid = document.getElementById('cat-grid');
+  grid.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (cat === selectedCategory ? ' selected' : '');
+    btn.textContent = cat;
+    btn.onclick = () => {
+      selectedCategory = cat;
+      grid.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+    grid.appendChild(btn);
+  });
+}
+
+// ─── START SOLO ──────────────────────────────────────
+function startSoloGame() {
+  const pool = WORD_BANK[selectedCategory] || WORD_BANK.Random;
+  const word = pool[Math.floor(Math.random() * pool.length)];
+  const hint = document.getElementById('hint-input').value.trim();
+  document.getElementById('hint-input').value = '';
+  initGame(word, hint, 1, selectedCategory);
+}
+
+// ─── START DUEL ──────────────────────────────────────
+function updateMaskedPreview() {
+  const val = document.getElementById('word-entry').value.replace(/[^a-zA-Z ]/g,'');
+  document.getElementById('masked-preview').textContent = val
+    ? '●'.repeat(val.replace(/ /g,'').length) : '—';
+}
+function startDuelGame() {
+  const raw = document.getElementById('word-entry').value.trim().replace(/[^a-zA-Z ]/g,'');
+  if (!raw || raw.replace(/ /g,'').length < 2) {
+    const inp = document.getElementById('word-entry');
+    inp.classList.add('shake');
+    inp.style.borderBottomColor = 'var(--chalk-r)';
+    setTimeout(() => { inp.classList.remove('shake'); inp.style.borderBottomColor = ''; }, 400);
+    return;
+  }
+  const hint = document.getElementById('p2-hint-input').value.trim();
+  document.getElementById('word-entry').value = '';
+  document.getElementById('p2-hint-input').value = '';
+  initGame(raw.toLowerCase(), hint, 2, 'Pass & Play');
+}
+
+// ─── INIT GAME ───────────────────────────────────────
+function initGame(word, hint, mode, category) {
+  state.word = word; state.hint = hint; state.mode = mode; state.category = category;
+  state.correct = new Set(); state.wrong = []; state.gameOver = false;
+
+  document.getElementById('mode-badge').textContent = mode === 2 ? '✏️ Pass & Play' : `Solo · ${category}`;
+  const hEl = document.getElementById('hint-display');
+  if (hint) { hEl.textContent = `Hint: ${hint}`; hEl.style.display = 'block'; }
+  else       { hEl.style.display = 'none'; }
+
+  buildKeyboard(); renderWord(); renderWrongLetters(); drawGallows(0); updateAttemptsLeft();
+  showScreen('screen-game');
+}
+
+function replayGame() {
+  if (state.mode === 2) showScreen('screen-entry');
+  else startSoloGame();
+}
+
+// ─── KEYBOARD ────────────────────────────────────────
+function buildKeyboard() {
+  const kb = document.getElementById('keyboard');
+  kb.innerHTML = '';
+  'abcdefghijklmnopqrstuvwxyz'.split('').forEach(letter => {
+    const btn = document.createElement('button');
+    btn.className = 'key'; btn.textContent = letter.toUpperCase(); btn.dataset.letter = letter;
+    btn.onclick = () => guessLetter(letter);
+    kb.appendChild(btn);
+  });
+}
+function setKeyState(letter, cls) {
+  const btn = document.querySelector(`.key[data-letter="${letter}"]`);
+  if (btn) { btn.classList.add(cls); btn.disabled = true; }
+}
+
+// ─── GUESS LOGIC ─────────────────────────────────────
+function guessLetter(letter) {
+  if (state.gameOver) return;
+  if (state.correct.has(letter) || state.wrong.includes(letter)) return;
+  if (state.word.includes(letter)) {
+    state.correct.add(letter); setKeyState(letter, 'used-correct'); renderWord(); spawnDust(true);
+    if (checkWin()) return;
+  } else {
+    state.wrong.push(letter); setKeyState(letter, 'used-wrong');
+    renderWrongLetters(); drawGallows(state.wrong.length); updateAttemptsLeft(); spawnDust(false);
+    if (state.wrong.length >= state.maxWrong) { endGame(false); return; }
+  }
+}
+document.addEventListener('keydown', e => {
+  if (document.getElementById('screen-game').classList.contains('active')) {
+    const l = e.key.toLowerCase();
+    if (/^[a-z]$/.test(l)) guessLetter(l);
+  }
+});
+
+// ─── CHALK DUST FX ───────────────────────────────────
+function spawnDust(correct) {
+  const color = correct ? 'rgba(130,224,154,' : 'rgba(240,120,120,';
+  for (let i = 0; i < 7; i++) {
+    const p = document.createElement('div');
+    p.className = 'dust-particle';
+    const size = 2 + Math.random() * 4;
+    p.style.cssText = `
+      width:${size}px; height:${size}px;
+      background:${color}0.72);
+      left:${15 + Math.random()*65}%;
+      bottom:${15 + Math.random()*25}%;
+      --dx:${(Math.random()-0.5)*50}px;
+      animation-duration:${0.55+Math.random()*0.9}s;
+      animation-delay:${Math.random()*0.12}s;
+    `;
+    document.body.appendChild(p);
+    p.addEventListener('animationend', () => p.remove());
+  }
+}
+
+// ─── RENDER ──────────────────────────────────────────
+function renderWord() {
+  const display = document.getElementById('word-display');
+  display.innerHTML = '';
+  state.word.split('').forEach(ch => {
+    const slot = document.createElement('div');
+    if (ch === ' ') { slot.className = 'letter-slot space'; }
+    else {
+      slot.className = 'letter-slot';
+      const charEl = document.createElement('div'); charEl.className = 'char';
+      charEl.textContent = state.correct.has(ch) ? ch.toUpperCase() : '';
+      const line = document.createElement('div'); line.className = 'underline';
+      slot.appendChild(charEl); slot.appendChild(line);
+    }
+    display.appendChild(slot);
+  });
+}
+function renderWrongLetters() {
+  const el = document.getElementById('wrong-letters'); el.innerHTML = '';
+  state.wrong.forEach(l => {
+    const span = document.createElement('span'); span.className = 'wrong-letter';
+    span.textContent = l.toUpperCase(); el.appendChild(span);
+  });
+}
+function updateAttemptsLeft() {
+  document.getElementById('attempts-left').textContent = state.maxWrong - state.wrong.length;
+}
+
+// ─── WIN CHECK ───────────────────────────────────────
+function checkWin() {
+  const letters = [...new Set(state.word.replace(/ /g,'').split(''))];
+  if (letters.every(l => state.correct.has(l))) { endGame(true); return true; }
+  return false;
+}
+
+// ─── END GAME ────────────────────────────────────────
+function endGame(won) {
+  state.gameOver = true;
+  if (won) { state.scores.wins++; state.scores.streak++; }
+  else {
+    state.scores.losses++; state.scores.streak = 0;
+    state.word.split('').forEach(ch => { if(ch !== ' ') state.correct.add(ch); });
+    renderWord();
+  }
+  saveScores();
+  setTimeout(() => {
+    document.getElementById('overlay-icon').textContent = won ? '🏆' : '💀';
+    const t = document.getElementById('overlay-title');
+    t.className = 'overlay-title ' + (won ? 'win' : 'lose');
+    t.textContent = won ? 'You Got It!' : 'Game Over!';
+    document.getElementById('overlay-word').innerHTML = `The word was: <strong>${state.word.toUpperCase()}</strong>`;
+    document.getElementById('overlay-desc').textContent = won
+      ? `Nailed it with ${state.wrong.length} mistake${state.wrong.length!==1?'s':''}! Streak: ${state.scores.streak}.`
+      : 'Better erase that and try again…';
+    document.getElementById('overlay').classList.add('active');
+  }, won ? 350 : 550);
+}
+function closeOverlay() { document.getElementById('overlay').classList.remove('active'); }
+function overlayReplay() { closeOverlay(); replayGame(); }
+
+// ─── CHALK CANVAS GALLOWS ────────────────────────────
+function chalkStroke(ctx, x1, y1, x2, y2, lw) {
+  ctx.lineWidth = lw || 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x1 + (Math.random()-0.5)*0.7, y1 + (Math.random()-0.5)*0.7);
+  ctx.lineTo(x2 + (Math.random()-0.5)*0.7, y2 + (Math.random()-0.5)*0.7);
+  ctx.stroke();
+}
+
+function drawGallows(step) {
+  const canvas = document.getElementById('hangman-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(236,232,220,0.15)'; ctx.shadowBlur = 4;
+
+  // gallows structure
+  ctx.strokeStyle = 'rgba(236,232,220,0.52)';
+  chalkStroke(ctx,  20, 238, 180, 238, 3.5);   // base
+  chalkStroke(ctx,  58, 238,  58,  18, 3.5);   // upright
+  chalkStroke(ctx,  58,  18, 140,  18, 3.5);   // top beam
+  chalkStroke(ctx,  58,  52,  88,  18, 2.5);   // brace
+  chalkStroke(ctx, 140,  18, 140,  52, 2);     // rope
+
+  // body parts
+  ctx.strokeStyle = 'rgba(236,232,220,0.92)';
+  const parts = [
+    () => { ctx.beginPath(); ctx.arc(140, 68, 15, 0, Math.PI*2); ctx.stroke(); },           // head
+    () => chalkStroke(ctx, 140, 83, 140, 153, 2.5),   // body
+    () => chalkStroke(ctx, 140,100, 113, 128, 2.5),   // left arm
+    () => chalkStroke(ctx, 140,100, 167, 128, 2.5),   // right arm
+    () => chalkStroke(ctx, 140,153, 112, 196, 2.5),   // left leg
+    () => chalkStroke(ctx, 140,153, 168, 196, 2.5),   // right leg
+  ];
+  for (let i = 0; i < step && i < parts.length; i++) parts[i]();
+
+  // dead face
+  if (step >= 6) {
+    ctx.strokeStyle = 'rgba(240,120,120,0.85)';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(240,120,120,0.28)';
+    ctx.beginPath(); ctx.moveTo(133,61); ctx.lineTo(139,67); ctx.moveTo(139,61); ctx.lineTo(133,67); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(141,61); ctx.lineTo(147,67); ctx.moveTo(147,61); ctx.lineTo(141,67); ctx.stroke();
+    ctx.beginPath(); ctx.arc(140, 77, 5, Math.PI, Math.PI*2); ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+}
+
+// ─── INIT ────────────────────────────────────────────
+loadScores();
+selectedCategory = 'Random';
+buildCategoryGrid();
+setTimeout(() => drawGallows(0), 50);
+</script>
 </body>
 </html>
