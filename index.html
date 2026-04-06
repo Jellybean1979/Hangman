@@ -550,7 +550,11 @@ html, body {
   </div>
 
 </div><!-- /chalkboard -->
-<div class="chalk-footer">Quarterman's Hangman · by Gary Langley</div>
+<div class="chalk-footer">
+  <strong id="versionTag" style="font-size: 0.8em; display: block;">
+    by Gary Langley — loading version…
+  </strong>
+</div>
 </div><!-- /board-wrap -->
 
 <!-- ══ WIN / LOSE OVERLAY ══ -->
@@ -855,11 +859,26 @@ function drawGallows(step) {
   ctx.shadowBlur = 0;
 }
 
+// ─── COMMIT HASH ─────────────────────────────────────
+async function updateCommitHash() {
+  const repo   = "jellybean1979/Hangman";
+  const branch = "main";
+  try {
+    const response = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`);
+    const data = await response.json();
+    const hash = data.sha.substring(0, 7);
+    document.getElementById("versionTag").textContent = `by Gary Langley — build ${hash}`;
+  } catch (err) {
+    document.getElementById("versionTag").textContent = "by Gary Langley — build unknown";
+  }
+}
+
 // ─── INIT ────────────────────────────────────────────
 loadScores();
 selectedCategory = 'Random';
 buildCategoryGrid();
 setTimeout(() => drawGallows(0), 50);
+updateCommitHash();
 </script>
 </body>
 </html>
